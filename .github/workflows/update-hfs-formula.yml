@@ -1,0 +1,127 @@
+name: update-hfs-formula
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "HFS release tag (e.g. v3.0.3). Leave empty for latest."
+        required: false
+        type: string
+  repository_dispatch:
+    types:
+      - hfs-release
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-hfs-formula
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tap
+        uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: release
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          PAYLOAD_TAG: ${{ github.event.client_payload.tag }}
+        run: |
+          set -euo pipefail
+          tag="${INPUT_TAG:-}"
+          [ -n "${PAYLOAD_TAG:-}" ] && tag="${tag:-$PAYLOAD_TAG}"
+          if [ -z "$tag" ]; then
+            tag="$(curl -fsSL https://api.github.com/repos/rejetto/hfs/releases/latest | jq -r '.tag_name')"
+          fi
+          [ "$tag" != "null" ] && [ -n "$tag" ] || { echo "Unable to resolve release tag"; exit 1; }
+          case "$tag" in
+            v*) ;;
+            *) tag="v$tag" ;;
+          esac
+          version="${tag#v}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Using tag $tag"
+
+      - name: Compute checksums and render formula
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          base="https://github.com/rejetto/hfs/releases/download/${TAG}"
+
+          function get_sha() {
+            local asset="$1"
+            local temp_file
+            temp_file="$(mktemp)"
+            curl -fL --retry 3 --retry-delay 2 "$base/$asset" -o "$temp_file"
+            sha256sum "$temp_file" | awk '{print $1}'
+            rm -f "$temp_file"
+          }
+
+          mac_arm_sha="$(get_sha "hfs-mac-arm64-${VERSION}.zip")"
+          mac_x64_sha="$(get_sha "hfs-mac-x64-${VERSION}.zip")"
+          linux_arm_sha="$(get_sha "hfs-linux-arm64-${VERSION}.zip")"
+          linux_x64_sha="$(get_sha "hfs-linux-x64-${VERSION}.zip")"
+
+          cat > Formula/hfs.rb <<EOF
+          class Hfs < Formula
+            desc "HTTP File Server"
+            homepage "https://rejetto.com/hfs"
+            version "${VERSION}"
+            license "GPL-3.0-only"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/rejetto/hfs/releases/download/v#{version}/hfs-mac-arm64-#{version}.zip"
+                sha256 "${mac_arm_sha}"
+              else
+                url "https://github.com/rejetto/hfs/releases/download/v#{version}/hfs-mac-x64-#{version}.zip"
+                sha256 "${mac_x64_sha}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/rejetto/hfs/releases/download/v#{version}/hfs-linux-arm64-#{version}.zip"
+                sha256 "${linux_arm_sha}"
+              else
+                url "https://github.com/rejetto/hfs/releases/download/v#{version}/hfs-linux-x64-#{version}.zip"
+                sha256 "${linux_x64_sha}"
+              end
+            end
+
+            def install
+              libexec.install "hfs", "plugins"
+              bin.write_exec_script(libexec/"hfs")
+            end
+
+            test do
+              assert_match "HELP", shell_output("#{bin}/hfs --help")
+            end
+          end
+          EOF
+
+      - name: Validate formula
+        run: ruby -c Formula/hfs.rb
+
+      - name: Commit and push if changed
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- Formula/hfs.rb; then
+            echo "Formula already up to date for $TAG"
+            exit 0
+          fi
+          git config user.name "Massimo Melina"
+          git config user.email "a@rejetto.com"
+          git add Formula/hfs.rb
+          git commit -m "formula: bump hfs to ${VERSION}"
+          git push
