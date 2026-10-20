@@ -1,26 +1,26 @@
 class Hfs < Formula
   desc "HTTP File Server"
   homepage "https://rejetto.com/hfs"
-  version "3.4.0-rc4"
+  version "3.4.0-rc5"
   license "GPL-3.0-only"
 
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/rejetto/hfs/releases/download/v#{version}/hfs-mac-arm64-#{version}.zip"
-      sha256 "5fb720b6f11e9a4f0edc6fde0b2d1198b1478126eafd3d9e7e9a2713e8e2e88f"
+      sha256 "72a171188536ece3fdf8af3e5f65096fbaf79b2015f7bbaf5df97586ea1ec8e4"
     else
       url "https://github.com/rejetto/hfs/releases/download/v#{version}/hfs-mac-x64-#{version}.zip"
-      sha256 "a7a9b23726fcd4d3d4f1e4a51ab5d2b2a21d1fde5b4d2d26d1f70ddff7d2039c"
+      sha256 "185be78ab45fa9227d4e2c73a55c968d031820a9e211708f5770c58196729f82"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
       url "https://github.com/rejetto/hfs/releases/download/v#{version}/hfs-linux-arm64-#{version}.zip"
-      sha256 "d2946d555d7a5e32677a5c2d8c42d94d880ac9501edf16f5d9de4225a3743613"
+      sha256 "77c09c85db275dc2d9a38ec27d2e780b5666367280cba072a90826aa182e2e04"
     else
       url "https://github.com/rejetto/hfs/releases/download/v#{version}/hfs-linux-x64-#{version}.zip"
-      sha256 "fb39cf7491cdb226b7c0ed9a93cf990fdb12cda09ecdec4a7dcb69f37b9fdb74"
+      sha256 "f1f4a978071b556098f80011101549afe0501ad72b23a661419c55920f18fe8d"
     end
   end
 
